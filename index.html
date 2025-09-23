@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Web App</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="stroka.css">
+</head>
+<body>
+    
+    <div class="app-container">
+        <!-- Главный экран -->          
+        <div id="main-screen" class="screen active">
+            <header class="header">
+                <div class="connection-info">
+                    <span class="connection-status">Подключено к 1СПредприятие (кв.3.20)</span>
+                </div>
+            </header>
+            
+
+            
+            <div class="tabs-container">
+                <div class="tabs">
+                    <div class="tab active" data-tab="documents">Документы</div>
+                    <div class="tab" data-tab="tasks">Задачи</div>
+                </div>
+            </div>
+            
+            <!-- Вкладка Документы -->
+            <div id="documents-tab" class="tab-content active">
+                <div class="documents-list">
+                    <div class="document-item">
+                        <div class="document-info">
+                            <div class="document-name">Отчет за декабрь 2023</div>
+                            <div class="document-details">PDF: 2.4 MB • 15.01.2024</div>
+                        </div>
+                       <button class="download-btn" data-document-id="report_dec_2023">Скачать PDF</button>
+                    </div>
+                    
+                    <div class="document-item">
+                        <div class="document-info">
+                            <div class="document-name">Договор с поставщиком</div>
+                            <div class="document-details">DOCX: 1.1 MB • 14.01.2024</div>
+                        </div>
+                        <button class="download-btn" data-document-id="contract_supplier">Скачать PDF</button>
+                    </div>
+                    
+                    <div class="document-item">
+                        <div class="document-info">
+                            <div class="document-name">Финансовый план Q1 2024</div>
+                            <div class="document-details">XLSX: 3.7 MB • 13.01.2024</div>
+                        </div>
+                        <button class="download-btn" data-document-id="financial_plan_q1">Скачать PDF</button>
+                    </div>
+                    
+                    <div class="document-item">
+                        <div class="document-info">
+                            <div class="document-name">Счет на оплату №12345</div>
+                            <div class="document-details">PDF: 1.2 MB • 12.01.2024</div>
+                        </div>
+                        <button class="download-btn" data-document-id="invoice_12345">Скачать PDF</button>
+                    </div>
+                    
+                    <div class="document-item">
+                        <div class="document-info">
+                            <div class="document-name">Акт выполненных работ</div>
+                            <div class="document-details">PDF: 850 KB • 11.01.2024</div>
+                        </div>
+                        <button class="download-btn" data-document-id="act_completed">Скачать PDF</button>
+                    </div>
+                </div>
+           <div class="news-widget">
+        <h2 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">📰 Новости IT-Sochi</h2>
+        <div style="text-align: center;">
+        </div>
+        <div class="news-counter" id="news-counter">Загрузка...</div>
+        
+        <div class="news-carousel">
+            <div class="carousel-container" id="carousel-container">
+            </div>
+        </div>
+        
+        <div class="carousel-controls">
+            <button class="carousel-btn" onclick="prevSlide()" id="prev-btn">◀ Назад</button>
+            <button class="carousel-btn" onclick="nextSlide()" id="next-btn">Вперед ▶</button>
+        </div>
+        
+        <div class="carousel-indicators" id="indicators"></div>
+    </div>
+            </div>
+            
+            <!-- Вкладка Задачи -->
+            <div id="tasks-tab" class="tab-content">
+                <div class="filters-container">
+                    <select id="status-filter" class="filter-select">
+                        <option value="all">Все статусы</option>
+                        <option value="in-progress">В работе</option>
+                        <option value="completed">Выполнено</option>
+                        <option value="postponed">Отложено</option>
+                        <option value="new">Новое</option>
+                    </select>
+                    <select id="date-filter" class="filter-select">
+                        <option value="newest">Дата ▼</option>
+                        <option value="oldest">Дата ▲</option>
+                    </select>
+                </div>
+            
+                <div class="events-container">
+                    <!-- Сюда будет рендериться JS -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Экран деталей задачи -->
+        <div id="task-detail-screen" class="screen">
+            <header class="header">
+                <button class="back-button" onclick="showScreen('main-screen')">← Назад</button>
+                <div class="header-title">Детали задачи</div>
+            </header>
+            
+            <div class="task-detail-container">
+                <div class="task-date">Дата: 15.03.2024</div>
+                <div class="task-main-title">Задача: Установка и настройка ККТ</div>
+                
+                <div class="task-description">
+                    Необходимо произвести установку контрольно-кассовой техники в торговом зале, настроить подключение к операционной системе, провести обучение персонала работе с новым оборудованием и обеспечить передачу данных в онлайн-кассы.
+                </div>
+                
+                <div class="task-info">
+                    <div class="info-item">
+                        <span class="info-label">Задача#</span>
+                        <span class="info-value" id="detail-task-id">T-201</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Срок:</span>
+                        <span class="info-value">15.03.2024 16:00</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Ответственный:</span>
+                        <span class="info-value">Технический отдел</span>
+                    </div>
+                </div>
+                
+                <div class="confirmation-section">
+                    <div class="section-title">Подтвердить выполнение задачи <span id="detail-confirm-id">#T-201</span></div>
+                    
+                    <div class="confirmation-options">
+                        <label class="confirmation-option">
+                            <input type="radio" name="confirmation" value="completed">
+                            <span class="option-text">Выполнено</span>
+                        </label>
+                        
+                        <label class="confirmation-option">
+                            <input type="radio" name="confirmation" value="partial">
+                            <span class="option-text">Частично</span>
+                        </label>
+                        
+                        <label class="confirmation-option">
+                            <input type="radio" name="confirmation" value="postponed">
+                            <span class="option-text">Отложено</span>
+                        </label>
+                    </div>
+                    
+                    <div class="comment-section">
+                        <div class="comment-label">Комментарий:</div>
+                        <textarea class="comment-input" placeholder="Введите комментарий... (например: «ККТ не отправляет в ОФД чеки»)" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn-confirm" onclick="confirmTask()">Подтвердить</button>
+                        <button class="btn-cancel" onclick="showScreen('main-screen')">Не подтверждать</button>
+                    </div>
+                </div>
+                
+                <div class="task-actions">
+                    <button class="btn-pdf" onclick="generateTaskPDF()">Скачать PDF</button>
+                    <button class="btn-comment" onclick="toggleCommentSection()">Комментарий</button>
+                </div>
+            </div>
+        </div>
+ 
+    </div>
+
+    <script src="script.js"></script>
+    <script src="stroka.js"></script>
+</body>
+</html>
