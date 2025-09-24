@@ -1068,7 +1068,61 @@ body {
     content: '...';
     animation: loadingDots 1.5s infinite;
 }
+/* Исправления для карусели новостей */
+.news-carousel {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
 
+.carousel-container {
+    display: flex;
+    transition: transform 0.3s ease;
+    gap: 0; /* Убираем промежутки между карточками */
+}
+
+.news-card {
+    min-width: 100%; /* Каждая карточка занимает всю ширину */
+    flex-shrink: 0;
+    margin: 0; /* Убираем отступы */
+    padding: 0; /* Убираем внутренние отступы */
+}
+
+/* Убедимся, что карточки отображаются правильно */
+.news-card img.news-image {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+}
+
+.news-content {
+    padding: 10px;
+}
+
+.carousel-controls {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.carousel-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ccc;
+    cursor: pointer;
+}
+
+.indicator.active {
+    background-color: #2481cc;
+}
 @keyframes loadingDots {
     0%, 20% { content: '.'; }
     40% { content: '..'; }
