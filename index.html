@@ -28,27 +28,19 @@
             </div>
             
             <!-- Вкладка Новости -->
-            <div id="news-tab" class="tab-content active">
-                <div class="news-widget">
-                    <div style="text-align: center;">
-                        <button class="refresh-btn" onclick="loadNews()">🔄 Обновить новости</button>
-                    </div>
-                    <div class="news-counter" id="news-counter">Загрузка...</div>
-                    
-                    <div class="news-carousel">
-                        <div class="carousel-container" id="carousel-container">
-                            <div class="loading">⏳ Загружаем последние новости</div>
-                        </div>
-                    </div>
-                    
-                    <div class="carousel-controls">
-                        <button class="carousel-btn" onclick="prevSlide()" id="prev-btn">◀ Назад</button>
-                        <button class="carousel-btn" onclick="nextSlide()" id="next-btn">Вперед ▶</button>
-                    </div>
-                    
-                    <div class="carousel-indicators" id="indicators"></div>
-                </div>
-            </div>
+           <div id="news-tab" class="tab-content active">
+  <div class="news-widget">
+      <div class="news-counter" id="news-counter">Загрузка...</div>
+      
+      <div class="news-carousel">
+          <div id="carousel-container" class="carousel-container">
+              <div class="loading">⏳ Загружаем последние новости</div>
+          </div>
+      </div>
+      
+      <div class="carousel-indicators" id="indicators"></div>
+  </div>
+</div>
             
             <!-- Вкладка Документы -->
             <div id="documents-tab" class="tab-content">

@@ -653,13 +653,12 @@ function simulateTelegramAuth() {
   userData = { guid: 'test-guid-12345', role: 'user' };
   console.log('Тестовая авторизация успешна:', userData);
 }
-
-// JavaScript для новостей
+// JavaScript для новостей — переработанный (анимации, tilt, красивые статические изображения)
+/* === Сохраняем PROXIES и основную логику запроса === */
 const PROXIES = [
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://corsproxy.org/?',
-    'https://proxy.cors.sh/?',
-    'https://cors-anywhere.herokuapp.com/'
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    'https://api.codetabs.com/v1/proxy?quest='
 ];
 
 let currentProxyIndex = 0;
@@ -667,26 +666,35 @@ let currentSlide = 0;
 let totalSlides = 0;
 let newsData = [];
 
+const AUTO_SCROLL_DELAY = 5000;
+let autoScrollInterval = null;
+let isTabFocused = true;
+
+/* ===================== ЗАГРУЗКА НОВОСТЕЙ ===================== */
 async function loadNews() {
     const container = document.getElementById('carousel-container');
     const counter = document.getElementById('news-counter');
-    
+
     if (!container) return;
-    
+
     container.innerHTML = '<div class="loading">⏳ Загружаем новости...</div>';
     if (counter) counter.textContent = 'Загрузка...';
 
     try {
-        // Пробуем загрузить с сайта через простой запрос
-        const news = await fetchNewsDirect();
+        const news = await fetchNewsWithProxy();
         newsData = news;
-        
+
+        if (newsData.length === 0) {
+            throw new Error('Новости не найдены');
+        }
+
     } catch (error) {
-        console.log('Используем демо-новости:', error.message);
-        // Используем демо-новости при ошибке
-        newsData = getDemoNews();
+        console.error('Ошибка загрузки новостей:', error);
+        container.innerHTML = `<div class="error">❌ Ошибка загрузки новостей: ${error.message}</div>`;
+        if (counter) counter.textContent = 'Ошибка загрузки';
+        return;
     }
-    
+
     totalSlides = newsData.length;
     currentSlide = 0;
 
@@ -694,238 +702,647 @@ async function loadNews() {
     renderCarousel();
 }
 
-// Простая попытка загрузки без прокси
-async function fetchNewsDirect() {
-    try {
-        // Пробуем прямой запрос (может сработать в некоторых окружениях)
-        const response = await fetch('https://www.it-sochi.ru/news/', {
-            method: 'GET',
-            mode: 'no-cors', // Пробуем режим no-cors
-            headers: {
-                'Accept': 'text/html'
+/* ===================== ПРОКСИ-ФЕТЧ ===================== */
+async function fetchNewsWithProxy() {
+    const url = 'https://www.it-sochi.ru/news/';
+
+    for (let i = 0; i < PROXIES.length; i++) {
+        try {
+            const proxyUrl = PROXIES[currentProxyIndex] + encodeURIComponent(url);
+            console.log(`Пробуем прокси: ${PROXIES[currentProxyIndex]}`);
+
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const html = await response.text();
+            const news = parseNewsFromHTML(html);
+
+            if (news.length > 0) {
+                console.log(`Успешно загружено ${news.length} новостей через прокси ${currentProxyIndex}`);
+                return news;
+            }
+
+        } catch (error) {
+            console.log(`Прокси ${currentProxyIndex} не сработал:`, error.message);
+        }
+
+        currentProxyIndex = (currentProxyIndex + 1) % PROXIES.length;
+    }
+
+    throw new Error('Все прокси серверы недоступны');
+}
+
+/* ===================== ПАРСИНГ (без изменений, только логирование осталось) ===================== */
+function parseNewsFromHTML(html) {
+    const news = [];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    console.log('Начинаем парсинг HTML...');
+
+    const newsSelectors = [
+        'article',
+        '.news-item',
+        '.news-list-item',
+        '.post-item',
+        '.entry',
+        '.news-block',
+        '.item-news',
+        '[class*="news"] > div',
+        '.content-item'
+    ];
+
+    let newsElements = [];
+
+    for (const selector of newsSelectors) {
+        const elements = doc.querySelectorAll(selector);
+        if (elements.length > 2) {
+            newsElements = Array.from(elements);
+            console.log(`Найдено ${elements.length} элементов по селектору: ${selector}`);
+            break;
+        }
+    }
+
+    if (newsElements.length === 0) {
+        console.log('Пробуем поиск по структуре...');
+        const containers = doc.querySelectorAll('div, article, section');
+        newsElements = Array.from(containers).filter(el => {
+            const text = el.textContent || '';
+            const hasTitle = el.querySelector('h2, h3, h4');
+            const hasLink = el.querySelector('a[href*="/news/"]');
+            const hasImage = el.querySelector('img');
+
+            return text.length > 100 && text.length < 2000 &&
+                (hasTitle || hasLink) &&
+                hasImage;
+        });
+
+        console.log(`Найдено по структуре: ${newsElements.length}`);
+    }
+
+    if (newsElements.length === 0) {
+        console.log('Пробуем поиск по ссылкам...');
+        const newsLinks = doc.querySelectorAll('a[href*="/news/"]');
+        const uniqueUrls = new Set();
+
+        newsLinks.forEach(link => {
+            const href = link.href;
+            if (href && href.includes('/news/') && !href.endsWith('/news/') && !uniqueUrls.has(href)) {
+                uniqueUrls.add(href);
+
+                let container = link.closest('div, article, li');
+                if (container) {
+                    newsElements.push(container);
+                }
             }
         });
-        
-        // В режиме no-cors response.text() не доступен, поэтому используем демо
-        return getDemoNews();
-        
-    } catch (error) {
-        // Всегда возвращаем демо-новости
-        return getDemoNews();
+
+        console.log(`Найдено по ссылкам: ${newsElements.length}`);
     }
+
+    newsElements.forEach((element, index) => {
+        try {
+            console.log(`Обрабатываем новость ${index + 1}...`);
+
+            let title = '';
+            const titleSelectors = ['h2', 'h3', 'h4', '.title', '.news-title', '.entry-title', '.post-title'];
+
+            for (const selector of titleSelectors) {
+                const titleEl = element.querySelector(selector);
+                if (titleEl && titleEl.textContent.trim()) {
+                    title = titleEl.textContent.trim();
+                    break;
+                }
+            }
+
+            if (!title) {
+                const linkEl = element.querySelector('a');
+                if (linkEl && linkEl.textContent.trim().length > 10) {
+                    title = linkEl.textContent.trim();
+                }
+            }
+
+            if (!title || title.length < 5) {
+                console.log('Пропускаем - нет заголовка');
+                return;
+            }
+
+            if (title.length > 100) title = title.substring(0, 100) + '...';
+
+            let link = '';
+            const linkEl = element.querySelector('a[href*="/news/"]');
+            if (linkEl && linkEl.href) {
+                link = linkEl.href;
+                if (!link.startsWith('http')) {
+                    link = 'https://www.it-sochi.ru' + (link.startsWith('/') ? link : '/' + link);
+                }
+            } else {
+                link = `https://www.it-sochi.ru/news/`;
+            }
+
+            let description = '';
+            const descSelectors = ['.excerpt', '.summary', '.description', '.news-desc', '.entry-content', '.post-content'];
+
+            for (const selector of descSelectors) {
+                const descEl = element.querySelector(selector);
+                if (descEl && descEl.textContent.trim()) {
+                    description = descEl.textContent.trim();
+                    break;
+                }
+            }
+
+            if (!description) {
+                const firstP = element.querySelector('p');
+                if (firstP && firstP.textContent.trim().length > 20) {
+                    description = firstP.textContent.trim();
+                }
+            }
+
+            if (description.length > 150) description = description.substring(0, 150) + '...';
+
+            let image = '';
+            const imgEl = element.querySelector('img');
+            if (imgEl && imgEl.src) {
+                image = imgEl.src;
+                if (!image.startsWith('http')) {
+                    image = 'https://www.it-sochi.ru' + (image.startsWith('/') ? image : '/' + image);
+                }
+            }
+
+            let date = '';
+            const dateSelectors = ['.date', '.post-date', '.news-date', '.published', 'time', '.meta'];
+
+            for (const selector of dateSelectors) {
+                const dateEl = element.querySelector(selector);
+                if (dateEl && dateEl.textContent.trim()) {
+                    date = dateEl.textContent.trim();
+                    date = date.replace(/[^\d\sа-яё\-:.,]/gi, '').trim();
+                    break;
+                }
+            }
+
+            const isDuplicate = news.some(item => item.title === title || item.link === link);
+            if (isDuplicate) {
+                console.log('Пропускаем дубликат:', title);
+                return;
+            }
+
+            news.push({
+                title,
+                link,
+                description: description || 'Читать подробнее на сайте IT-Sochi...',
+                image: image || getStaticPlaceholderImage(title, index),
+                date: date || 'Недавно'
+            });
+
+            console.log(`Добавлена новость: ${title}`);
+
+        } catch (e) {
+            console.error(`Ошибка обработки новости ${index + 1}:`, e);
+        }
+    });
+
+    const uniqueNews = news.filter((item, index, self) =>
+        index === self.findIndex(t => t.link === item.link)
+    );
+
+    console.log(`Всего уникальных новостей: ${uniqueNews.length}`);
+    return uniqueNews.slice(0, 10);
 }
+
+/* ===================== СТАТИЧНЫЕ КРАСИВЫЕ ИЗОБРАЖЕНИЯ (ГРАДИЕНТЫ, БЕЗ ТЕКСТА) ===================== */
+/**
+ * Возвращает data:image/svg+xml;base64 строку с градиентным прямоугольником.
+ * Без текста, статично — выглядит "бомбово" и быстро грузится.
+ * Используем индекс/текст чтобы генерировать разнообразные палитры.
+ */
+function getStaticPlaceholderImage(seedText = '', index = 0) {
+    // Простая хэш-функция чтобы генерировать разные цвета на основе seed/index
+    function hashToInt(s) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619) >>> 0;
+        }
+        return h;
+    }
+    const h = hashToInt((seedText || '') + index);
+    // Генерируем 3 цвета из хеша
+    function colorFromHash(offset) {
+        const r = (h >> (offset * 8)) & 0xff;
+        const g = (h >> ((offset + 1) * 5)) & 0xff;
+        const b = (h >> ((offset + 2) * 3)) & 0xff;
+        return `rgb(${r},${g},${b})`;
+    }
+
+    const c1 = colorFromHash(0);
+    const c2 = colorFromHash(1);
+    const c3 = colorFromHash(2);
+
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='675' viewBox='0 0 1200 675'>
+        <defs>
+            <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>
+                <stop offset='0%' stop-color='${c1}'/>
+                <stop offset='50%' stop-color='${c2}'/>
+                <stop offset='100%' stop-color='${c3}'/>
+            </linearGradient>
+            <filter id='grain'>
+                <feTurbulence baseFrequency='0.8' numOctaves='2' stitchTiles='stitch' result='t'/>
+                <feColorMatrix type='saturate' values='0'/>
+                <feBlend in='SourceGraphic' in2='t' mode='overlay'/>
+            </filter>
+        </defs>
+        <rect width='100%' height='100%' fill='url(#g)' />
+        <rect width='100%' height='100%' fill='black' opacity='0.02' />
+    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+}
+
+/* ===================== РЕНДЕР КАРУСЕЛИ + АНИМАЦИИ ===================== */
 function renderCarousel() {
     const container = document.getElementById('carousel-container');
     const indicators = document.getElementById('indicators');
-    
+
     if (!container) return;
-    
-    // Проверяем, есть ли новости
     if (!newsData || newsData.length === 0) {
         container.innerHTML = '<div class="error">Новости не загружены</div>';
         return;
     }
-    
-    let html = '';
+
+    console.log(`Рендерим ${newsData.length} новостей`);
+
+    let fragment = document.createDocumentFragment();
+
     newsData.forEach((item, index) => {
-        // Проверяем наличие обязательных полей
         const safeTitle = item.title || 'Новость IT-Sochi';
-        const safeImage = item.image || getPlaceholderImage(safeTitle);
+        const safeImage = item.image || getStaticPlaceholderImage(safeTitle, index);
         const safeDescription = item.description || 'Читать на сайте IT-Sochi...';
-        const safeDate = item.date || 'Сегодня';
-        const safeLink = item.link || 'https://www.it-sochi.ru/';
-        
-        html += `
-            <div class="news-card">
-                <img src="${safeImage}" alt="${safeTitle}" class="news-image">
-                <div class="news-content">
-                    <div class="news-title">
-                        <a href="${safeLink}" target="_blank" rel="noopener noreferrer">
-                            ${safeTitle}
-                        </a>
-                    </div>
-                    <div class="news-description">
-                        ${safeDescription}
-                    </div>
-                    <div class="news-meta">
-                        <span>📅 ${safeDate}</span>
-                        <span>🔗 it-sochi.ru</span>
-                    </div>
+        const safeDate = item.date || 'Недавно';
+        const safeLink = item.link || 'https://www.it-sochi.ru/news/';
+
+        const slide = document.createElement('div');
+        slide.className = 'news-card carousel-slide';
+        slide.tabIndex = 0;
+        slide.setAttribute('data-index', index);
+        slide.style.opacity = '0';
+        slide.style.transform = 'translateY(18px)';
+        slide.style.transition = 'opacity 550ms cubic-bezier(.2,.9,.2,1), transform 650ms cubic-bezier(.2,.9,.2,1)';
+        slide.innerHTML = `
+            <img src="${safeImage}" alt="${escapeHtml(safeTitle)}" class="news-image" loading="lazy">
+            <div class="news-content">
+                <div class="news-title">
+                    <a href="${safeLink}" target="_blank" rel="noopener noreferrer" tabindex="-1">${escapeHtml(safeTitle)}</a>
+                </div>
+                <div class="news-description">${escapeHtml(safeDescription)}</div>
+                <div class="news-meta">
+                    <span>📅 ${escapeHtml(safeDate)}</span>
+                    <span>🔗 it-sochi.ru</span>
                 </div>
             </div>
         `;
+
+        // Подготовка: стиль для картинки (размытие -> снятие при загрузке)
+        const img = slide.querySelector('img.news-image');
+        img.style.transition = 'transform 700ms cubic-bezier(.2,.9,.2,1), filter 700ms ease, opacity 400ms ease';
+        img.style.filter = 'blur(8px) saturate(0.95)';
+        img.style.opacity = '0.98';
+        img.decoding = 'async';
+        img.onerror = () => { img.src = getStaticPlaceholderImage(safeTitle, index); };
+
+        // Когда картинка загрузится — плавно убираем blur и немного увеличим (parallax feel)
+        img.onload = () => {
+            requestAnimationFrame(() => {
+                img.style.filter = 'blur(0px) saturate(1)';
+                img.style.transform = 'scale(1.03)';
+                img.style.opacity = '1';
+                // После небольшого таймаута вернём к норме (оставляя лёгкий scale)
+                setTimeout(() => {
+                    img.style.transform = 'scale(1.0)';
+                }, 700);
+            });
+        };
+
+        // Tilt / micro-interaction: pointermove внутри карточки даёт лёгкий 3D-эффект
+        addTiltEffect(slide, img);
+
+        fragment.appendChild(slide);
     });
 
-    container.innerHTML = html;
-    updateCarousel();
-    
+    container.innerHTML = '';
+    container.appendChild(fragment);
+    totalSlides = newsData.length;
+
+    // Создаем индикаторы
     if (indicators) {
         indicators.innerHTML = '';
-        for (let i = 0; i < totalSlides; i++) {
-            indicators.innerHTML += `<div class="indicator ${i === currentSlide ? 'active' : ''}" onclick="goToSlide(${i})"></div>`;
+        for (let i = 0; i < newsData.length; i++) {
+            const dot = document.createElement('div');
+            dot.classList.add('indicator');
+            dot.dataset.index = i;
+            dot.setAttribute('role', 'button');
+            dot.setAttribute('aria-label', `Перейти к новости ${i + 1}`);
+            dot.tabIndex = 0;
+            if (i === currentSlide) dot.classList.add('active');
+            dot.addEventListener('click', () => {
+                currentSlide = i;
+                updateCarousel(true);
+                resetAutoScroll();
+            });
+            dot.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    dot.click();
+                }
+            });
+            indicators.appendChild(dot);
         }
     }
 
-    updateControls();
+    // Включаем плавный по очереди вход (stagger)
+    const slides = Array.from(document.querySelectorAll('.carousel-slide'));
+    slides.forEach((s, i) => {
+        // небольшая задержка для ступенчатой анимации
+        setTimeout(() => {
+            s.style.opacity = '1';
+            s.style.transform = 'translateY(0)';
+        }, 70 * i);
+    });
+
+    // Обновление позиций и слушателей
+    updateCarousel(false);
+    addSwipeListeners();
+    addKeyboardNavigation();
+    addHoverPauseBehavior(container);
 }
 
-function extractDomain(url) {
-    try {
-        return new URL(url).hostname.replace('www.', '');
-    } catch {
-        return 'it-sochi.ru';
+/* ===================== ПОМОЩНИК: escapeHtml ===================== */
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+/* ===================== ОБНОВЛЕНИЕ КАРУСЕЛИ ===================== */
+function updateCarousel(animate = true) {
+    const container = document.getElementById('carousel-container');
+    const indicators = document.getElementById('indicators');
+    if (!container || !newsData || newsData.length === 0) return;
+
+    if (animate) {
+        container.style.transition = 'transform 0.6s cubic-bezier(.2,.9,.2,1)';
+    } else {
+        container.style.transition = 'none';
+    }
+    container.style.transform = `translateX(-${currentSlide * 100}%)`;
+
+    if (indicators) {
+        [...indicators.children].forEach(dot => {
+            dot.classList.remove('active');
+            dot.getAnimations?.()?.forEach(a => a.cancel?.());
+        });
+        const activeDot = indicators.querySelector(`.indicator[data-index="${currentSlide}"]`);
+        if (activeDot) {
+            activeDot.classList.add('active');
+            // Подсветка active dot — легкая пульсация через Web Animations API
+            try {
+                activeDot.animate([
+                    { transform: 'scale(1)', boxShadow: '0 0 0px rgba(58,155,220,0.0)' },
+                    { transform: 'scale(1.25)', boxShadow: '0 0 14px rgba(58,155,220,0.28)' },
+                    { transform: 'scale(1)', boxShadow: '0 0 6px rgba(58,155,220,0.18)' }
+                ], {
+                    duration: 900,
+                    iterations: 1,
+                    easing: 'cubic-bezier(.2,.9,.2,1)'
+                });
+            } catch (e) {/* silent */}
+        }
     }
 }
 
+/* ===================== SLIDE NAVIGATION ===================== */
 function nextSlide() {
-    if (currentSlide < totalSlides - 1) {
-        currentSlide++;
-        updateCarousel();
-    }
+    if (totalSlides === 0) return;
+    currentSlide = (currentSlide + 1) % totalSlides;
+    updateCarousel();
 }
 
 function prevSlide() {
-    if (currentSlide > 0) {
-        currentSlide--;
-        updateCarousel();
-    }
-}
-
-function goToSlide(slideIndex) {
-    currentSlide = slideIndex;
+    if (totalSlides === 0) return;
+    currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
     updateCarousel();
 }
-function updateCarousel() {
-    const container = document.getElementById('carousel-container');
-    const indicators = document.getElementById('indicators');
-    
-    if (!container || !newsData || newsData.length === 0) return;
-    
-    container.style.transform = `translateX(-${currentSlide * 100}%)`;
-    
-    if (indicators) {
-        const indicatorElements = indicators.querySelectorAll('.indicator');
-        indicatorElements.forEach((indicator, index) => {
-            indicator.classList.toggle('active', index === currentSlide);
-        });
-    }
-    
-    updateControls();
-}
-function updateControls() {
-    const prevBtn = document.getElementById('prev-btn');
-    const nextBtn = document.getElementById('next-btn');
-    if (prevBtn && nextBtn) {
-        prevBtn.disabled = currentSlide === 0;
-        nextBtn.disabled = currentSlide === totalSlides - 1;
-    }
-}
 
-async function fetchWithProxies() {
-    // Сразу возвращаем демо-новости, так как прокси не работают
-    return getDemoNews();
-}
-
-function parseNewsFromHTML(html) {
-    // Всегда возвращаем демо-новости
-    return getDemoNews();
-}
-function getPlaceholderImage(title) {
-    const colors = ['#3498db', '#e74c3c', '#27ae60', '#f39c12', '#9b59b6', '#1abc9c'];
-    const color = colors[title.length % colors.length];
-    
-    // Очищаем title от не-ASCII символов
-    const cleanTitle = title.replace(/[^\x00-\x7F]/g, '').substring(0, 30);
-    
-    const svgString = `<svg width="300" height="180" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="${color}"/>
-        <text x="50%" y="50%" font-family="Arial" font-size="14" fill="white" 
-              text-anchor="middle" dy=".3em">${cleanTitle || 'IT-Sochi'}</text>
-    </svg>`;
-    
-    return `data:image/svg+xml;base64,${btoa(svgString)}`;
-}
-
-function getDemoNews() {
-    const demoNews = [
-        {
-            title: "IT мероприятия в Сочи - расписание на 2024 год",
-            link: "https://www.it-sochi.ru/",
-            description: "Анонсы предстоящих IT мероприятий, конференций и митапов в Сочи.",
-            image: getPlaceholderImage("IT мероприятия"),
-            date: "Сегодня"
-        },
-        {
-            title: "Стартап экосистема Сочи: новые проекты",
-            link: "https://www.it-sochi.ru/",
-            description: "Обзор самых перспективных IT стартапов в регионе.",
-            image: getPlaceholderImage("Стартапы"),
-            date: "Вчера"
-        },
-        {
-            title: "ИТ инфраструктура Сочи: развитие",
-            link: "https://www.it-sochi.ru/",
-            description: "Развитие IT инфраструктуры в Сочи: новые технологии.",
-            image: getPlaceholderImage("Инфраструктура"),
-            date: "2 дня назад"
-        },
-        {
-            title: "Цифровая трансформация бизнеса",
-            link: "https://www.it-sochi.ru/",
-            description: "Как предприятия внедряют цифровые технологии.",
-            image: getPlaceholderImage("Трансформация"),
-            date: "3 дня назад"
-        },
-        {
-            title: "Образовательные IT программы",
-            link: "https://www.it-sochi.ru/",
-            description: "Курсы и тренинги для IT специалистов в Сочи.",
-            image: getPlaceholderImage("Образование"),
-            date: "Неделю назад"
-        }
-    ];
-    
-    return demoNews;
-}
-// Автопрокрутка карусели
+/* ===================== AUTOSCROLL ===================== */
 function startAutoScroll() {
-    setInterval(() => {
-        if (totalSlides > 0) {
-            if (currentSlide < totalSlides - 1) {
-                nextSlide();
-            } else {
-                currentSlide = 0;
-                updateCarousel();
-            }
-        }
-    }, 5000);
+    stopAutoScroll();
+    if (totalSlides > 1 && isTabFocused) {
+        autoScrollInterval = setInterval(() => {
+            nextSlide();
+        }, AUTO_SCROLL_DELAY);
+    }
 }
 
-// Загружаем при старте и при переключении на вкладку новостей
-document.addEventListener('DOMContentLoaded', () => {
-    // Загружаем новости когда открывается вкладка новостей
-    const newsTab = document.querySelector('.tab[data-tab="news"]');
-    if (newsTab) {
-        newsTab.addEventListener('click', function() {
-            if (newsData.length === 0) {
-                loadNews();
-                startAutoScroll();
-            }
-        });
+function stopAutoScroll() {
+    if (autoScrollInterval) {
+        clearInterval(autoScrollInterval);
+        autoScrollInterval = null;
     }
-    
-    // Если активна вкладка новостей при загрузке
-    const newsTabContent = document.getElementById('news-tab');
-    if (newsTabContent && newsTabContent.classList.contains('active')) {
-        loadNews();
+}
+
+function resetAutoScroll() {
+    stopAutoScroll();
+    startAutoScroll();
+}
+
+/* ===================== SWIPE / DRAG / POINTER ===================== */
+function addSwipeListeners() {
+    const container = document.getElementById('carousel-container');
+    if (!container) return;
+
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+
+    container.classList.remove('dragging');
+
+    container.onpointerdown = (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        currentX = startX;
+        container.style.transition = 'none';
+        container.classList.add('dragging');
+        stopAutoScroll();
+        e.preventDefault();
+    };
+
+    container.onpointermove = (e) => {
+        if (!isDragging) return;
+        currentX = e.clientX;
+        const diffX = currentX - startX;
+        const width = container.clientWidth;
+        const percentage = (diffX / width) * 100;
+        container.style.transform = `translateX(calc(${-currentSlide * 100}% + ${percentage}%))`;
+    };
+
+    container.onpointerup = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        container.classList.remove('dragging');
+        const diffX = e.clientX - startX;
+        const threshold = container.clientWidth / 6;
+
+        if (diffX > threshold) {
+            prevSlide();
+        } else if (diffX < -threshold) {
+            nextSlide();
+        } else {
+            updateCarousel();
+        }
         startAutoScroll();
+    };
+
+    container.onpointercancel = container.onpointerleave = () => {
+        if (isDragging) {
+            isDragging = false;
+            container.classList.remove('dragging');
+            updateCarousel();
+            startAutoScroll();
+        }
+    };
+}
+
+/* ===================== TILT / MICRO-INTERACTIONS ===================== */
+function addTiltEffect(card, img) {
+    // Добавляем деликатный tilt при наведении и лёгкий параллакс картинки
+    let rect = null;
+
+    function onEnter() {
+        rect = card.getBoundingClientRect();
+        card.style.transition = 'transform 350ms cubic-bezier(.2,.9,.2,1), box-shadow 350ms ease';
+        card.style.willChange = 'transform';
+        card.style.boxShadow = '0 12px 38px rgba(28,110,164,0.22)';
+        // включаем pointermove слушатель
+        card.addEventListener('pointermove', onMove);
+    }
+    function onLeave() {
+        card.removeEventListener('pointermove', onMove);
+        card.style.transform = 'rotateX(0deg) rotateY(0deg) translateZ(0)';
+        card.style.boxShadow = '';
+        img.style.transform = 'scale(1)';
+    }
+    function onMove(e) {
+        if (!rect) rect = card.getBoundingClientRect();
+        const px = (e.clientX - rect.left) / rect.width;
+        const py = (e.clientY - rect.top) / rect.height;
+        const rotateY = (px - 0.5) * 8; // degrees
+        const rotateX = (0.5 - py) * 6; // degrees
+        card.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        // parallax on image
+        const imgTranslateX = (px - 0.5) * 8;
+        const imgTranslateY = (py - 0.5) * 6;
+        img.style.transform = `translate3d(${imgTranslateX}px, ${imgTranslateY}px, 0) scale(1.03)`;
+    }
+
+    card.addEventListener('pointerenter', onEnter);
+    card.addEventListener('pointerleave', onLeave);
+    card.addEventListener('blur', onLeave);
+}
+
+/* ===================== КЛАВИАТУРНАЯ НАВИГАЦИЯ ===================== */
+function addKeyboardNavigation() {
+    // Если уже добавлен — пропускаем
+    if (addKeyboardNavigation._added) return;
+    addKeyboardNavigation._added = true;
+
+    document.addEventListener('keydown', (e) => {
+        // не блокируем, только если пользователь не в input/textarea
+        const tag = document.activeElement && document.activeElement.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+
+        if (e.key === 'ArrowRight') {
+            nextSlide();
+            resetAutoScroll();
+        } else if (e.key === 'ArrowLeft') {
+            prevSlide();
+            resetAutoScroll();
+        }
+    });
+}
+
+/* ===================== ПАУЗА НА НАВЕДЕНИЕ / ФОКУС ===================== */
+function addHoverPauseBehavior(container) {
+    if (!container) return;
+
+    container.addEventListener('pointerenter', () => {
+        stopAutoScroll();
+        // чуть подсветим активную карточку
+        const activeCard = container.querySelector(`.carousel-slide[data-index="${currentSlide}"]`);
+        if (activeCard) activeCard.style.transform = 'translateY(-6px) scale(1.01)';
+    });
+    container.addEventListener('pointerleave', () => {
+        startAutoScroll();
+        const activeCard = container.querySelector(`.carousel-slide[data-index="${currentSlide}"]`);
+        if (activeCard) activeCard.style.transform = '';
+    });
+
+    // Останавливаем автоскролл если фокус внутри (для клавиатуры/экранных читалок)
+    container.addEventListener('focusin', () => stopAutoScroll());
+    container.addEventListener('focusout', () => startAutoScroll());
+}
+
+/* ===================== ОБРАБОТЧИКИ ЗАГРУЗКИ ВКЛАДКИ / АВТООБНОВЛЕНИЕ ===================== */
+document.addEventListener('visibilitychange', () => {
+    isTabFocused = document.visibilityState === 'visible';
+    if (isTabFocused) startAutoScroll();
+    else stopAutoScroll();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const newsTab = document.querySelector('.tab[data-tab="news"]');
+    const newsTabContent = document.getElementById('news-tab');
+
+    function initNews() {
+        if (newsData.length === 0) {
+            loadNews().then(() => {
+                startAutoScroll();
+            });
+        } else {
+            startAutoScroll();
+        }
+    }
+
+    if (newsTab) {
+        newsTab.addEventListener('click', initNews);
+    }
+
+    if (newsTabContent && newsTabContent.classList.contains('active')) {
+        initNews();
     }
 });
 
-// Обновление каждые 10 минут
+/* ===================== ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ КАЖДЫЕ 10 МИНУТ ===================== */
 setInterval(() => {
     const newsTabContent = document.getElementById('news-tab');
     if (newsTabContent && newsTabContent.classList.contains('active')) {
         loadNews();
     }
 }, 600000);
+
+/* ===================== УТИЛИТЫ ===================== */
+// Старый getPlaceholderImage оставлен, но мы используем getStaticPlaceholderImage
+function getPlaceholderImage(text) {
+    return getStaticPlaceholderImage(text);
+}
